@@ -23,6 +23,7 @@ export default function App() {
   const [loadingBooking, setLoadingBooking] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('all');
+  const [bookedSlots, setBookedSlots] = useState([]); // jadwal yang sudah di-approve untuk ruangan terpilih
 
   const [formData, setFormData] = useState({
     fasilitas_id: '', tanggal: '', waktu_mulai: '', durasi: '1',
@@ -72,7 +73,18 @@ export default function App() {
         setView('home');
         setFormData({ fasilitas_id: '', tanggal: '', waktu_mulai: '', durasi: '1', tujuan: '', nama: '', nim: '', email: '', telepon: '' });
       })
-      .catch(() => alert('Gagal mengirim booking. Pastikan server backend sedang berjalan.'))
+      .catch((err) => {
+        if (err.response?.status === 409) {
+          // Jadwal bentrok dengan booking yang sudah disetujui
+          alert(err.response.data.message || 'Jadwal bentrok! Silakan pilih waktu lain.');
+        } else if (err.response?.status === 422) {
+          // Validasi gagal (ada field yang belum diisi / format salah)
+          alert('Data belum lengkap atau format salah. Periksa kembali isian kamu.');
+        } else {
+          // Server tidak merespons
+          alert('Gagal mengirim booking. Pastikan server backend sedang berjalan.');
+        }
+      })
       .finally(() => setLoadingBooking(false));
   };
 
@@ -331,7 +343,15 @@ export default function App() {
                           <span className="bg-slate-100 text-slate-600 px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 border border-slate-200"><Monitor size={14} /> Projector</span>
                         </div>
                       </div>
-                      <button onClick={() => { setSelectedRoom(r); setFormData({ ...formData, fasilitas_id: r.nama }); setStep(1); }} className="w-fit bg-blue-800 text-white font-semibold px-8 py-2.5 rounded-lg hover:bg-blue-900 transition-colors">Booking Sekarang</button>
+                      <button onClick={() => {
+                        setSelectedRoom(r);
+                        setFormData({ ...formData, fasilitas_id: r.nama });
+                        setStep(1);
+                        // Ambil jadwal yang sudah di-approve untuk ruangan ini
+                        axios.get(`${API_BASE}/ruangan/${encodeURIComponent(r.nama)}/booked`)
+                          .then(res => setBookedSlots(res.data))
+                          .catch(() => setBookedSlots([]));
+                      }} className="w-fit bg-blue-800 text-white font-semibold px-8 py-2.5 rounded-lg hover:bg-blue-900 transition-colors">Booking Sekarang</button>
                     </div>
                   </div>
                 ))}
@@ -388,6 +408,39 @@ export default function App() {
                           </select>
                         </div>
                       </div>
+
+                      {/* --- DAFTAR JADWAL SUDAH TERISI (APPROVED) --- */}
+                      {(() => {
+                        // Konversi tanggal pilihan user (DD/MM/YYYY) ke format DB (YYYY-MM-DD) untuk dicocokkan
+                        let tanggalDB = '';
+                        if (formData.tanggal && formData.tanggal.split('/').length === 3) {
+                          const [d, m, y] = formData.tanggal.split('/');
+                          if (d && m && y) tanggalDB = `${y}-${m}-${d}`;
+                        }
+                        // Tampilkan slot untuk tanggal terpilih (atau semua slot jika tanggal belum dipilih)
+                        const slotTampil = tanggalDB
+                          ? bookedSlots.filter(s => s.tanggal === tanggalDB)
+                          : bookedSlots;
+
+                        if (slotTampil.length === 0) return null;
+                        return (
+                          <div className="mt-2 p-4 border border-red-200 bg-red-50 rounded-xl">
+                            <h4 className="text-sm font-bold text-red-700 flex items-center gap-2 mb-3">
+                              <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse"></span>
+                              Jadwal Sudah Terisi {tanggalDB ? `(${formData.tanggal})` : '(semua tanggal)'}
+                            </h4>
+                            <ul className="text-sm text-red-600 space-y-1.5 ml-4 list-disc">
+                              {slotTampil.map((slot, idx) => (
+                                <li key={idx} className="font-medium">
+                                  {slot.tanggal} — jam {slot.waktu_mulai} ({slot.durasi} jam)
+                                </li>
+                              ))}
+                            </ul>
+                            <p className="text-xs text-red-500 mt-3 italic">*Pilih waktu di luar jadwal di atas, karena slot tersebut sudah disetujui.</p>
+                          </div>
+                        );
+                      })()}
+
                       <div className="flex justify-end gap-3 mt-8">
                         <button onClick={() => setSelectedRoom(null)} className="px-6 py-2.5 text-blue-600 font-semibold hover:bg-blue-50 rounded-lg">BATAL</button>
                         <button onClick={() => setStep(2)} className="px-6 py-2.5 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">LANJUT</button>
