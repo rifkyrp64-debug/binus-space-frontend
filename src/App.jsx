@@ -158,6 +158,7 @@ export default function App() {
       case 'pending':  return 'bg-yellow-500/20 text-yellow-700 border-yellow-500/30 font-semibold';
       case 'approved': return 'bg-green-500/20 text-green-700 border-green-500/30 font-semibold';
       case 'rejected': return 'bg-red-500/20 text-red-700 border-red-500/30 font-semibold';
+      case 'selesai':  return 'bg-slate-500/20 text-slate-600 border-slate-400/30 font-semibold';
       default:         return 'bg-gray-500/20 text-gray-700 border-gray-500/30 font-semibold';
     }
   };
@@ -166,8 +167,25 @@ export default function App() {
       case 'pending':  return 'Menunggu';
       case 'approved': return 'Disetujui';
       case 'rejected': return 'Ditolak';
+      case 'selesai':  return 'Selesai';
       default:         return status || 'Menunggu';
     }
+  };
+
+  // Cek apakah tanggal booking sudah lewat (sebelum hari ini)
+  const isExpired = (tanggal) => {
+    if (!tanggal) return false;
+    const hariIni = new Date();
+    hariIni.setHours(0, 0, 0, 0);
+    const tglBooking = new Date(tanggal);
+    return tglBooking < hariIni;
+  };
+
+  // Status yang ditampilkan: approved + tanggal lewat = "selesai"
+  const getEffectiveStatus = (booking) => {
+    const s = booking.status || 'pending';
+    if (s === 'approved' && isExpired(booking.tanggal)) return 'selesai';
+    return s;
   };
 
   // ==========================================
@@ -549,16 +567,16 @@ export default function App() {
                     <LogOut size={18} /> Keluar
                   </button>
                 </div>
-                <div className="flex gap-3 mb-6">
-                  {['all','pending','approved','rejected'].map((status) => (
+                <div className="flex gap-3 mb-6 flex-wrap">
+                  {['all','pending','approved','selesai','rejected'].map((status) => (
                     <button key={status} onClick={() => setAdminFilter(status)} className={`px-4 py-2 rounded-lg transition-all font-medium ${adminFilter === status ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-300'}`}>
-                      {status === 'all' && 'Semua'}{status === 'pending' && 'Menunggu'}{status === 'approved' && 'Disetujui'}{status === 'rejected' && 'Ditolak'}
+                      {status === 'all' && 'Semua'}{status === 'pending' && 'Menunggu'}{status === 'approved' && 'Disetujui'}{status === 'selesai' && 'Selesai'}{status === 'rejected' && 'Ditolak'}
                     </button>
                   ))}
                 </div>
                 <div className="space-y-4">
-                  {bookings.filter(b => adminFilter === 'all' || (b.status || 'pending') === adminFilter).map((booking) => {
-                    const currentStatus = booking.status || 'pending';
+                  {bookings.filter(b => adminFilter === 'all' || getEffectiveStatus(b) === adminFilter).map((booking) => {
+                    const currentStatus = getEffectiveStatus(booking);
                     return (
                       <div key={booking.id} className="bg-white border border-slate-200 rounded-xl p-6 hover:border-blue-300 hover:shadow-md transition-all">
                         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-2">
@@ -592,6 +610,7 @@ export default function App() {
                           </div>
                         )}
                         {currentStatus === 'approved' && <div className="text-center p-3 bg-green-50 rounded-lg text-green-700 font-semibold border border-green-100">✓ Booking telah disetujui</div>}
+                        {currentStatus === 'selesai' && <div className="text-center p-3 bg-slate-100 rounded-lg text-slate-600 font-semibold border border-slate-200">✓ Booking selesai (jadwal telah berlalu)</div>}
                         {currentStatus === 'rejected' && (
                           <div className="p-3 bg-red-50 rounded-lg border border-red-100">
                             <p className="text-center text-red-700 font-semibold mb-1">✗ Booking ditolak</p>
