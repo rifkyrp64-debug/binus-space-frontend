@@ -20,6 +20,7 @@ export default function App() {
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
   const [loginData, setLoginData]     = useState({ username: '', password: '' });
   const [loginError, setLoginError]   = useState('');
+  const [adminName, setAdminName]     = useState(''); // nama admin yang sedang login
   const [loadingBooking, setLoadingBooking] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('all');
@@ -93,9 +94,9 @@ export default function App() {
   };
 
   const handleApprove = (id) => {
-    axios.put(`${API_BASE}/admin/bookings/${id}/status`, { status: 'approved' })
+    axios.put(`${API_BASE}/admin/bookings/${id}/status`, { status: 'approved', diproses_oleh: adminName })
       .then(() => fetchBookings())
-      .catch(() => setBookings(prev => prev.map(b => b.id === id ? { ...b, status: 'approved' } : b)));
+      .catch(() => setBookings(prev => prev.map(b => b.id === id ? { ...b, status: 'approved', diproses_oleh: adminName } : b)));
   };
 
   // Buka popup alasan penolakan
@@ -112,9 +113,9 @@ export default function App() {
     }
     const id = rejectTarget.id;
     const emailUser = rejectTarget.email;
-    axios.put(`${API_BASE}/admin/bookings/${id}/status`, { status: 'rejected', alasan_penolakan: rejectReason })
+    axios.put(`${API_BASE}/admin/bookings/${id}/status`, { status: 'rejected', alasan_penolakan: rejectReason, diproses_oleh: adminName })
       .then(() => fetchBookings())
-      .catch(() => setBookings(prev => prev.map(b => b.id === id ? { ...b, status: 'rejected', alasan_penolakan: rejectReason } : b)))
+      .catch(() => setBookings(prev => prev.map(b => b.id === id ? { ...b, status: 'rejected', alasan_penolakan: rejectReason, diproses_oleh: adminName } : b)))
       .finally(() => {
         // Notifikasi (simulasi pengiriman email ke pemohon)
         alert(`Booking ditolak. Notifikasi beserta alasan telah dikirim ke email pemohon: ${emailUser}`);
@@ -127,8 +128,10 @@ export default function App() {
     e.preventDefault();
     setLoginError('');
     axios.post(`${API_BASE}/login`, { email: loginData.username, password: loginData.password })
-      .then(() => {
+      .then((res) => {
         setIsAdminLoggedIn(true);
+        // Simpan nama admin yang login (fallback ke email jika nama tidak ada)
+        setAdminName(res.data?.user?.nama || res.data?.user?.email || 'Admin');
         setLoginData({ username: '', password: '' });
       })
       .catch(err => {
@@ -179,6 +182,26 @@ export default function App() {
     hariIni.setHours(0, 0, 0, 0);
     const tglBooking = new Date(tanggal);
     return tglBooking < hariIni;
+  };
+
+  // Format tanggal DB (2026-08-01) jadi "1 Agustus 2026"
+  const formatTanggal = (tanggal) => {
+    if (!tanggal) return '-';
+    const d = new Date(tanggal);
+    if (isNaN(d)) return tanggal;
+    const bulan = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+    return `${d.getDate()} ${bulan[d.getMonth()]} ${d.getFullYear()}`;
+  };
+
+  // Format timestamp DB (2026-06-09T07:12:28.000000Z) jadi "9 Juni 2026, 14.12"
+  const formatTanggalWaktu = (timestamp) => {
+    if (!timestamp) return '-';
+    const d = new Date(timestamp);
+    if (isNaN(d)) return timestamp; // fallback kalau formatnya tak terduga
+    const bulan = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+    const jam = String(d.getHours()).padStart(2, '0');
+    const menit = String(d.getMinutes()).padStart(2, '0');
+    return `${d.getDate()} ${bulan[d.getMonth()]} ${d.getFullYear()}, ${jam}.${menit}`;
   };
 
   // Status yang ditampilkan: approved + tanggal lewat = "selesai"
@@ -561,9 +584,9 @@ export default function App() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
                   <div>
                     <h1 className="text-3xl font-bold mb-2 text-slate-900">Admin Panel - Persetujuan Booking</h1>
-                    <p className="text-slate-600">Kelola dan setujui permintaan peminjaman ruangan</p>
+                    <p className="text-slate-600">Login sebagai <span className="font-semibold text-blue-700">{adminName}</span> — kelola dan setujui permintaan peminjaman ruangan</p>
                   </div>
-                  <button onClick={() => setIsAdminLoggedIn(false)} className="flex items-center gap-2 px-5 py-2.5 bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 font-semibold rounded-lg transition-colors border border-red-100">
+                  <button onClick={() => { setIsAdminLoggedIn(false); setAdminName(''); }} className="flex items-center gap-2 px-5 py-2.5 bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 font-semibold rounded-lg transition-colors border border-red-100">
                     <LogOut size={18} /> Keluar
                   </button>
                 </div>
@@ -584,7 +607,7 @@ export default function App() {
                             <h3 className="text-xl font-bold mb-2 text-blue-700">{booking.fasilitas_id}</h3>
                             <span className={`inline-block px-3 py-1 rounded-md text-xs border ${getStatusColor(currentStatus)}`}>{getStatusText(currentStatus)}</span>
                           </div>
-                          <span className="text-xs text-slate-500 font-medium bg-slate-100 px-3 py-1 rounded-full">Diajukan: {booking.created_at || '-'}</span>
+                          <span className="text-xs text-slate-500 font-medium bg-slate-100 px-3 py-1 rounded-full">Diajukan: {formatTanggalWaktu(booking.created_at)}</span>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5 p-4 bg-slate-50 rounded-lg">
                           <div className="space-y-3">
@@ -594,7 +617,7 @@ export default function App() {
                             <div className="flex items-center gap-2 text-sm pl-6"><span className="text-slate-600 w-20">Telepon:</span><span className="text-slate-900">{booking.telepon}</span></div>
                           </div>
                           <div className="space-y-3">
-                            <div className="flex items-center gap-2 text-sm"><Calendar size={16} className="text-blue-600" /><span className="text-slate-600 w-20">Tanggal:</span><span className="font-semibold text-slate-900">{booking.tanggal}</span></div>
+                            <div className="flex items-center gap-2 text-sm"><Calendar size={16} className="text-blue-600" /><span className="text-slate-600 w-20">Tanggal:</span><span className="font-semibold text-slate-900">{formatTanggal(booking.tanggal)}</span></div>
                             <div className="flex items-center gap-2 text-sm"><Clock size={16} className="text-blue-600" /><span className="text-slate-600 w-20">Waktu:</span><span className="text-slate-900">{booking.waktu_mulai} ({booking.durasi} jam)</span></div>
                             <div className="flex items-center gap-2 text-sm"><MapPin size={16} className="text-blue-600" /><span className="text-slate-600 w-20">Tipe:</span><span className="text-slate-900">{booking.fasilitas_id.includes('Lab') ? 'Lab' : 'Kelas'}</span></div>
                           </div>
@@ -609,20 +632,31 @@ export default function App() {
                             <button onClick={() => openRejectModal(booking)} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-semibold transition-all bg-red-600 hover:bg-red-700 text-white shadow-sm hover:shadow"><X size={18} /> Tolak</button>
                           </div>
                         )}
-                        {currentStatus === 'approved' && <div className="text-center p-3 bg-green-50 rounded-lg text-green-700 font-semibold border border-green-100">✓ Booking telah disetujui</div>}
-                        {currentStatus === 'selesai' && <div className="text-center p-3 bg-slate-100 rounded-lg text-slate-600 font-semibold border border-slate-200">✓ Booking selesai (jadwal telah berlalu)</div>}
+                        {currentStatus === 'approved' && (
+                          <div className="text-center p-3 bg-green-50 rounded-lg text-green-700 font-semibold border border-green-100">
+                            ✓ Booking telah disetujui
+                            {booking.diproses_oleh && <span className="block text-xs font-normal text-green-600 mt-1">Disetujui oleh: {booking.diproses_oleh}</span>}
+                          </div>
+                        )}
+                        {currentStatus === 'selesai' && (
+                          <div className="text-center p-3 bg-slate-100 rounded-lg text-slate-600 font-semibold border border-slate-200">
+                            ✓ Booking selesai (jadwal telah berlalu)
+                            {booking.diproses_oleh && <span className="block text-xs font-normal text-slate-500 mt-1">Disetujui oleh: {booking.diproses_oleh}</span>}
+                          </div>
+                        )}
                         {currentStatus === 'rejected' && (
                           <div className="p-3 bg-red-50 rounded-lg border border-red-100">
                             <p className="text-center text-red-700 font-semibold mb-1">✗ Booking ditolak</p>
                             {booking.alasan_penolakan && (
                               <p className="text-sm text-red-600 text-center"><span className="font-medium">Alasan:</span> {booking.alasan_penolakan}</p>
                             )}
+                            {booking.diproses_oleh && <p className="text-xs text-red-500 text-center mt-1">Ditolak oleh: {booking.diproses_oleh}</p>}
                           </div>
                         )}
                       </div>
                     );
                   })}
-                  {bookings.filter(b => adminFilter === 'all' || (b.status || 'pending') === adminFilter).length === 0 && (
+                  {bookings.filter(b => adminFilter === 'all' || getEffectiveStatus(b) === adminFilter).length === 0 && (
                     <div className="text-center py-16 bg-white rounded-xl border border-dashed border-slate-300 text-slate-500 font-medium">Tidak ada booking dengan status ini</div>
                   )}
                 </div>
