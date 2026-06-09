@@ -8,7 +8,8 @@ import backgroundRuangKelas from './assets/Background_Ruang_Kelas.jpeg';
 import Ruangkelas301 from './assets/Ruang_Kelas_301.jpg';
 import LabKomputerA from './assets/Lab_Komputer_A.jpg';
 
-const API_BASE = 'http://127.0.0.1:8000/api';
+// Alamat API: ambil dari environment variable (Vercel), fallback ke localhost untuk development
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8000/api';
 
 export default function App() {
   const [view, setView]               = useState('home');
