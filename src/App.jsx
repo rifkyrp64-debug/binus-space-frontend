@@ -25,6 +25,10 @@ export default function App() {
   const [activeCategory, setActiveCategory] = useState('all');
   const [bookedSlots, setBookedSlots] = useState([]); // jadwal yang sudah di-approve untuk ruangan terpilih
 
+  // State untuk popup alasan penolakan
+  const [rejectTarget, setRejectTarget] = useState(null); // booking yang sedang ditolak
+  const [rejectReason, setRejectReason] = useState('');
+
   const [formData, setFormData] = useState({
     fasilitas_id: '', tanggal: '', waktu_mulai: '', durasi: '1',
     tujuan: '', nama: '', nim: '', email: '', telepon: '',
@@ -94,10 +98,29 @@ export default function App() {
       .catch(() => setBookings(prev => prev.map(b => b.id === id ? { ...b, status: 'approved' } : b)));
   };
 
-  const handleReject = (id) => {
-    axios.put(`${API_BASE}/admin/bookings/${id}/status`, { status: 'rejected' })
+  // Buka popup alasan penolakan
+  const openRejectModal = (booking) => {
+    setRejectTarget(booking);
+    setRejectReason('');
+  };
+
+  // Kirim penolakan beserta alasannya
+  const submitReject = () => {
+    if (!rejectReason.trim()) {
+      alert('Mohon isi alasan penolakan terlebih dahulu.');
+      return;
+    }
+    const id = rejectTarget.id;
+    const emailUser = rejectTarget.email;
+    axios.put(`${API_BASE}/admin/bookings/${id}/status`, { status: 'rejected', alasan_penolakan: rejectReason })
       .then(() => fetchBookings())
-      .catch(() => setBookings(prev => prev.map(b => b.id === id ? { ...b, status: 'rejected' } : b)));
+      .catch(() => setBookings(prev => prev.map(b => b.id === id ? { ...b, status: 'rejected', alasan_penolakan: rejectReason } : b)))
+      .finally(() => {
+        // Notifikasi (simulasi pengiriman email ke pemohon)
+        alert(`Booking ditolak. Notifikasi beserta alasan telah dikirim ke email pemohon: ${emailUser}`);
+        setRejectTarget(null);
+        setRejectReason('');
+      });
   };
 
   const handleAdminLogin = (e) => {
@@ -565,11 +588,18 @@ export default function App() {
                         {currentStatus === 'pending' && (
                           <div className="flex gap-3 mt-4">
                             <button onClick={() => handleApprove(booking.id)} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-semibold transition-all bg-green-600 hover:bg-green-700 text-white shadow-sm hover:shadow"><Check size={18} /> Setujui</button>
-                            <button onClick={() => handleReject(booking.id)} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-semibold transition-all bg-red-600 hover:bg-red-700 text-white shadow-sm hover:shadow"><X size={18} /> Tolak</button>
+                            <button onClick={() => openRejectModal(booking)} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-semibold transition-all bg-red-600 hover:bg-red-700 text-white shadow-sm hover:shadow"><X size={18} /> Tolak</button>
                           </div>
                         )}
                         {currentStatus === 'approved' && <div className="text-center p-3 bg-green-50 rounded-lg text-green-700 font-semibold border border-green-100">✓ Booking telah disetujui</div>}
-                        {currentStatus === 'rejected' && <div className="text-center p-3 bg-red-50 rounded-lg text-red-700 font-semibold border border-red-100">✗ Booking ditolak</div>}
+                        {currentStatus === 'rejected' && (
+                          <div className="p-3 bg-red-50 rounded-lg border border-red-100">
+                            <p className="text-center text-red-700 font-semibold mb-1">✗ Booking ditolak</p>
+                            {booking.alasan_penolakan && (
+                              <p className="text-sm text-red-600 text-center"><span className="font-medium">Alasan:</span> {booking.alasan_penolakan}</p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -582,6 +612,45 @@ export default function App() {
           </div>
         )}
       </div>
+
+      {/* === POPUP ALASAN PENOLAKAN === */}
+      {rejectTarget && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-8 shadow-2xl">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="h-11 w-11 bg-red-50 rounded-full flex items-center justify-center shrink-0">
+                <X size={22} className="text-red-600" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900">Tolak Permohonan Booking</h3>
+            </div>
+            <p className="text-sm text-slate-500 mb-5">
+              Booking <span className="font-semibold text-slate-700">{rejectTarget.fasilitas_id}</span> oleh <span className="font-semibold text-slate-700">{rejectTarget.nama}</span>. Alasan penolakan akan dikirimkan ke email pemohon.
+            </p>
+
+            <label className="block text-sm font-semibold text-slate-700 mb-2">Alasan Penolakan</label>
+            <textarea
+              rows="4"
+              placeholder="Contoh: Ruangan sedang dalam perbaikan pada tanggal tersebut..."
+              className="w-full p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-100 focus:border-red-400 transition-all outline-none resize-none"
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+            ></textarea>
+
+            <div className="flex items-center gap-2 mt-3 text-xs text-slate-400">
+              <Mail size={14} />
+              <span>Notifikasi akan dikirim ke: {rejectTarget.email}</span>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button onClick={() => { setRejectTarget(null); setRejectReason(''); }} className="px-6 py-2.5 text-slate-600 font-semibold hover:bg-slate-100 rounded-lg transition-colors">BATAL</button>
+              <button onClick={submitReject} className="flex items-center gap-2 px-6 py-2.5 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-colors">
+                <Mail size={16} /> Kirim & Tolak
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Footer />
     </div>
   );
